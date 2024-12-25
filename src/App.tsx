@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+
 import JSON5 from 'json5';
 import ReactFlow, {
-  addEdge,
   MiniMap,
   Controls,
   Background,
   applyNodeChanges,
   applyEdgeChanges,
-} from 'react-flow-renderer';
-import 'react-flow-renderer/dist/style.css';
-import 'react-flow-renderer/dist/theme-default.css';
+  Node,
+  Edge,
+} from 'react-flow-renderer';  // Remove `addEdge`
+
+
+
 import { GoogleGenerativeAI } from '@google/generative-ai';
+
 const apiKey = import.meta.env.VITE_APP_GEMINI_API_KEY;
 
 const genAI = new GoogleGenerativeAI(apiKey);
@@ -25,27 +29,27 @@ const levelColors = [
 ];
 
 export default function MindMap(): JSX.Element {
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
-  const [query, setQuery] = useState('');
-  const [depth, setDepth] = useState(3);
-  const [expandedNodes, setExpandedNodes] = useState(new Set());
-  const [tree, setTree] = useState(null);
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const [query, setQuery] = useState<string>('');
+  const [depth, setDepth] = useState<number>(3);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [tree, setTree] = useState<{ name: string; subNodes: any[] } | null>(null);
 
   const convertTreeToFlow = (
-    tree,
-    expandedNodes,
+    tree: { name: string; subNodes: any[] },
+    expandedNodes: Set<string>,
     x = 0,
     y = 0,
-    parentId = null,
+    parentId: string | null = null,
     level = 0,
     horizontalSpacing = 300,
     verticalSpacing = 200
-  ) => {
-    const nodes = [];
-    const edges = [];
+  ): { nodes: Node[]; edges: Edge[] } => {
+    const nodes: Node[] = [];
+    const edges: Edge[] = [];
 
-    const addNode = (node, id, parentId, x, y, level) => {
+    const addNode = (node: { name: string; subNodes: any[] }, id: string, parentId: string | null, x: number, y: number, level: number) => {
       nodes.push({
         id,
         data: { label: node.name },
@@ -81,7 +85,10 @@ export default function MindMap(): JSX.Element {
       }
     };
 
-    addNode(tree, 'root', parentId, x, y, level);
+    if (tree) {
+      addNode(tree, 'root', parentId, x, y, level);
+    }
+
     return { nodes, edges };
   };
 
@@ -124,9 +131,13 @@ export default function MindMap(): JSX.Element {
       let parsedResponse;
       try {
         parsedResponse = JSON5.parse(cleanedJsonResponse);
-      } catch (parseError) {
-        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+      } catch (parseError: unknown) {
+        if (parseError instanceof Error) {
+          throw new Error(`Failed to parse JSON: ${parseError.message}`);
+        }
+        throw new Error('Failed to parse JSON: Unknown error');
       }
+      
 
       if (
         !parsedResponse ||
@@ -140,7 +151,7 @@ export default function MindMap(): JSX.Element {
 
       const tree = {
         name: parsedResponse.centralNode,
-        subNodes: parsedResponse.nodes.map((node) => ({
+        subNodes: parsedResponse.nodes.map((node: { name: string; subNodes: any[] }) => ({
           name: node.name,
           subNodes: node.subNodes || [],
         })),
@@ -150,13 +161,17 @@ export default function MindMap(): JSX.Element {
       const { nodes: generatedNodes, edges: generatedEdges } = convertTreeToFlow(tree, expandedNodes);
       setNodes(generatedNodes);
       setEdges(generatedEdges);
-    } catch (error) {
-      console.error('Error generating mind map:', error);
-      alert(`Failed to generate the mind map: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        alert(`Failed to generate the mind map: ${error.message}`);
+      } else {
+        alert('An unknown error occurred.');
+      }
     }
+    
   };
 
-  const toggleNode = (nodeId) => {
+  const toggleNode = (nodeId: string) => {
     setExpandedNodes((prev) => {
       const updated = new Set(prev);
       if (updated.has(nodeId)) {
@@ -175,7 +190,7 @@ export default function MindMap(): JSX.Element {
     });
   };
 
-  const handleNodeClick = (_, node) => {
+  const handleNodeClick = (_: any, node: Node) => {
     toggleNode(node.id);
   };
 
@@ -251,12 +266,10 @@ export default function MindMap(): JSX.Element {
           onNodesChange={(changes) => setNodes((nds) => applyNodeChanges(changes, nds))}
           onEdgesChange={(changes) => setEdges((eds) => applyEdgeChanges(changes, eds))}
           onNodeClick={handleNodeClick}
-          onConnect={(connection) => setEdges((eds) => addEdge(connection, eds))}
-          fitView
         >
-          <MiniMap nodeColor={(node) => levelColors[node.data.level % levelColors.length]} />
+          <MiniMap />
           <Controls />
-          <Background color="#555" gap={16} />
+          <Background />
         </ReactFlow>
       </div>
     </div>
